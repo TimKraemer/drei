@@ -6,6 +6,8 @@ expect.extend({ toMatchImageSnapshot })
 
 const host = 'http://localhost:5188/'
 
+const TIMEOUT = 10000
+
 async function waitForEvent(page, eventName) {
   await page.evaluate(
     (eventName) => new Promise((resolve) => document.addEventListener(eventName, resolve, { once: true })),
@@ -31,26 +33,47 @@ describe('snapshot', () => {
   let page
   beforeAll(async () => {
     await waitForServer()
+    console.log('server ok')
+
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    console.log('executablePath', executablePath)
+
+    const args = ['--enable-gpu']
+
     browser = await puppeteer.launch({
-      headless: 'new',
-      executablePath: process.env.CHROMEWEBDRIVER,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      executablePath,
+      args,
     })
+    console.log('browser ok')
+
     page = await browser.newPage()
-  }, 30000)
+    console.log('page ok')
 
-  it('should match previous one', async () => {
-    // ⏳ "r3f" event
-    await page.goto(host)
-    await waitForEvent(page, 'puppeteer:r3f')
+    page.on('console', (message) => console.log(`Page log: ${message.text()}`))
+  }, TIMEOUT)
 
-    // 📸 <canvas>
-    const $canvas = await page.$('canvas[data-engine]')
-    const image = await $canvas.screenshot()
+  it(
+    'should match previous one',
+    async () => {
+      // ⏳ "r3f" event
+      await page.goto(host)
+      console.log('goto ok')
 
-    // compare
-    expect(image).toMatchImageSnapshot({})
-  }, 30000)
+      await waitForEvent(page, 'puppeteer:r3f')
+      console.log('event ok')
+
+      // 📸 <canvas>
+      const $canvas = await page.$('canvas[data-engine]')
+      const image = await $canvas.screenshot()
+
+      // compare
+      expect(image).toMatchImageSnapshot({
+        // failureThreshold: 1,
+        // failureThresholdType: 'percent',
+      })
+    },
+    TIMEOUT
+  )
 
   afterAll(async () => {
     await browser?.close()
